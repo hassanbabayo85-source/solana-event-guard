@@ -7,12 +7,15 @@ use crate::event::Event;
 #[async_trait]
 pub trait Source: Send {
     /// Wait for the next live event. `Ok(None)` means the connection dropped
-    /// and the engine should reconnect and backfill.
+    /// and the engine should call `reconnect` and then `backfill`.
     async fn next(&mut self) -> Result<Option<Event>>;
 
-    /// Fetch events newer than `after_signature` (e.g. via getSignaturesForAddress).
-    /// Called after a reconnect. Implementations should re-read a small overlap
-    /// window; the dedupe layer removes the repeats. This is simpler and safer
-    /// than trying to find the exact boundary.
+    /// (Re)establish the live subscription. The engine calls this BEFORE
+    /// `backfill`, so no event can fall into a gap between the two.
+    async fn reconnect(&mut self) -> Result<()>;
+
+    /// Fetch events newer than `after_signature`, OLDEST FIRST.
+    /// Implementations should re-read a small overlap window; the dedupe
+    /// layer removes the repeats. Simpler and safer than finding the exact boundary.
     async fn backfill(&mut self, after_signature: Option<&str>) -> Result<Vec<Event>>;
 }

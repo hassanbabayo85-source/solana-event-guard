@@ -85,3 +85,16 @@ async fn checkpoint_roundtrip_and_update() {
     assert_eq!(cp.last_signature, "sig-2");
     assert_eq!(cp.last_slot, 20);
 }
+
+#[tokio::test]
+async fn handled_flag_roundtrip() {
+    let store = store().await;
+    let stream = unique_stream("handled");
+    let e = event("sig-H", 0, 100);
+
+    assert!(!store.is_handled(&stream, &e).await.unwrap(), "unknown event is not handled");
+    store.record_event(&stream, &e).await.unwrap();
+    assert!(!store.is_handled(&stream, &e).await.unwrap(), "recorded but not handled yet");
+    store.mark_handled(&stream, &e).await.unwrap();
+    assert!(store.is_handled(&stream, &e).await.unwrap());
+}

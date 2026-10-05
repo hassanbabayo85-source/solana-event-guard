@@ -100,6 +100,11 @@ impl Source for WsSource {
         }
     }
 
+    async fn reconnect(&mut self) -> Result<()> {
+        self.ws = None;
+        self.connect().await
+    }
+
     async fn backfill(&mut self, _after_signature: Option<&str>) -> Result<Vec<Event>> {
         // Week 2: getSignaturesForAddress with an overlap window.
         Err(GuardError::Source("backfill not implemented yet (week 2)".into()))

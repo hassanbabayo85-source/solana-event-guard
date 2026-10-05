@@ -3,16 +3,21 @@ use async_trait::async_trait;
 use crate::error::Result;
 use crate::event::{Checkpoint, Event};
 
-/// Persistence for checkpoints and dedupe.
+/// Persistence for checkpoints, dedupe and "handled" tracking.
 #[async_trait]
 pub trait CheckpointStore: Send + Sync {
     async fn load(&self, stream_id: &str) -> Result<Option<Checkpoint>>;
 
     async fn save(&self, stream_id: &str, checkpoint: &Checkpoint) -> Result<()>;
 
-    /// Record an event. Returns `true` if it is new, `false` if it was already
-    /// seen (duplicate). Delivery is at-least-once, not exactly-once.
+    /// Record an event. Returns `true` if it is new, `false` if it was already seen.
     async fn record_event(&self, stream_id: &str, event: &Event) -> Result<bool>;
+
+    /// Has the handler finished for this event? (false if unknown)
+    async fn is_handled(&self, stream_id: &str, event: &Event) -> Result<bool>;
+
+    /// Mark the event as fully handled.
+    async fn mark_handled(&self, stream_id: &str, event: &Event) -> Result<()>;
 }
 
 #[cfg(feature = "postgres")]
@@ -32,7 +37,7 @@ mod pg {
             Self { pool }
         }
 
-        /// Apply the bundled migrations (checkpoints, events, deliveries).
+        /// Apply the bundled migrations.
         pub async fn migrate(&self) -> Result<()> {
             sqlx::migrate!("./migrations")
                 .run(&self.pool)
@@ -88,6 +93,32 @@ mod pg {
             .execute(&self.pool)
             .await?;
             Ok(res.rows_affected() == 1)
+        }
+
+        async fn is_handled(&self, stream_id: &str, e: &Event) -> Result<bool> {
+            let row: Option<(bool,)> = sqlx::query_as(
+                "SELECT handled_at IS NOT NULL FROM events
+                 WHERE stream_id = $1 AND signature = $2 AND ix_index = $3",
+            )
+            .bind(stream_id)
+            .bind(&e.signature)
+            .bind(e.ix_index as i32)
+            .fetch_optional(&self.pool)
+            .await?;
+            Ok(row.map(|(h,)| h).unwrap_or(false))
+        }
+
+        async fn mark_handled(&self, stream_id: &str, e: &Event) -> Result<()> {
+            sqlx::query(
+                "UPDATE events SET handled_at = now()
+                 WHERE stream_id = $1 AND signature = $2 AND ix_index = $3",
+            )
+            .bind(stream_id)
+            .bind(&e.signature)
+            .bind(e.ix_index as i32)
+            .execute(&self.pool)
+            .await?;
+            Ok(())
         }
     }
 }
