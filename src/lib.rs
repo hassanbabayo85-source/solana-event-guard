@@ -19,3 +19,6 @@ pub use source::Source;
 pub use store::CheckpointStore;
 #[cfg(feature = "postgres")]
 pub use store::PgStore;
+
+pub mod ws_source;
+pub use ws_source::WsSource;
