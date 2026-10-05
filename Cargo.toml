@@ -27,3 +27,6 @@ sqlx = { version = "0.8", optional = true, default-features = false, features = 
     "migrate",
     "macros",
 ] }
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
